@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 base_dir = Path(__file__).resolve().parent.parent.parent
 
 
-def read_bathymeetry():
+def read_depth():
     df = pd.read_parquet(base_dir / "data/baltic_sea_depth.parquet")
     df = df.set_index(["lon", "lat"])
     return df
@@ -17,7 +17,8 @@ class BalticSeaDataset(Dataset):
     def __init__(self, data_path=base_dir / "data/train_data.pkl"):
         with open(data_path, "rb") as f:
             self.mean, self.std, self.data_list = pickle.load(f)
-        self.df_dep = read_bathymeetry()
+            self.data_list = list(self.data_list.groupby(["year", "mon", "lat", "lon"]))
+        self.df_dep = read_depth()
 
     def __len__(self):
         return len(self.data_list)

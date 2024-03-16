@@ -47,9 +47,9 @@ if __name__ == "__main__":
     df.reset_index(drop=True, inplace=True)
 
     groups = df.groupby(["year", "mon", "lat", "lon", "dep"]).mean()
-    groups = groups.reset_index(level="dep")
+    groups = groups.reset_index()
 
     # save mean, std, data
-    output_data = (mean, std, list(groups.groupby(["year", "mon", "lat", "lon"])))
+    output_data = (mean, std, groups)
     with open(base_dir / "data/train_data.pkl", "wb") as f:
         pickle.dump(output_data, f)
