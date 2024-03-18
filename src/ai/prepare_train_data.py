@@ -46,14 +46,14 @@ def prepare_train_data():
     df = df.reset_index(drop=True)
     df = df.drop(df[df["dep"] < dep_lb[0]].index).reset_index(drop=True)
     df = df.drop(df[df["dep"] >= dep_ub[-1]].index).reset_index(drop=True)
-    for lb, ub in tqdm(zip(dep_lb, dep_ub)):
+    for lb, ub in tqdm(zip(dep_lb, dep_ub), total=30):
         mid = (lb + ub) / 2
         df.loc[(lb <= df["dep"]) & (df["dep"] < ub), "dep"] = mid
     df.reset_index(drop=True, inplace=True)
 
     df = df.groupby(["year", "mon", "lat", "lon", "dep"]).mean().reset_index()
 
-    return mean, std, df
+    return mean.astype(np.float32), std.astype(np.float32), df
 
 
 def convert_vae_data(data_entry: tuple[tuple, pd.DataFrame]):
@@ -68,9 +68,12 @@ def convert_vae_data(data_entry: tuple[tuple, pd.DataFrame]):
     data_vae.loc[data["dep"], ["oxy", "tmp", "sal"]] = data[["oxy", "tmp", "sal"]].values
     data_vae.reset_index(inplace=True)
 
-    meta = pd.Series({"year": year, "mon": mon, "lat": lat, "lon": lon, "max_dep": max_dep})
+    data_vae.loc[data_vae["dep"] > max_dep, ["oxy", "tmp", "sal"]] = np.nan
 
-    return meta, data_vae
+    meta = pd.Series({"year": year, "mon": mon, "lat": lat, "lon": lon, "max_dep": max_dep})
+    meta = meta.astype(np.float32).to_dict()
+
+    return meta, data_vae.astype(np.float32)
 
 
 def prepare_vae_data(train_data: pd.DataFrame):
@@ -83,7 +86,7 @@ if __name__ == "__main__":
     mean, std, train_data = prepare_train_data()
     vae_train_data = prepare_vae_data(train_data)
 
-    pd.to_pickle(mean, base_dir / "data/mean.pkl")
+    pd.to_pickle((mean, std), base_dir / "data/train_mean_std.pkl")
     train_data.to_parquet(base_dir / "data/train_data.parquet")
 
-    pd.to_pickle(vae_train_data, base_dir / "data/vae_train_data.parquet")
+    pd.to_pickle(vae_train_data, base_dir / "data/vae_train_data.pkl")

@@ -1,8 +1,12 @@
 import pickle
 from pathlib import Path
+from typing import Optional
 
+import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset
+from pytorch_lightning import LightningDataModule
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm.contrib.concurrent import process_map
 
 base_dir = Path(__file__).resolve().parent.parent.parent
@@ -41,9 +45,10 @@ class BalticSeaDataset(Dataset):
         return meta, data.reset_index(drop=True)
 
 
-class VaeDataset(Dataset):
+class VAEDataset(Dataset):
+    def __init__(self, nan_rate=0.5):
+        self.nan_rate = nan_rate
 
-    def __init__(self):
         print("reading data...")
         self.df_dep = read_depth()
         self.mean, self.std = read_mean_std()
@@ -52,30 +57,83 @@ class VaeDataset(Dataset):
         print("filtering data for training...")
         # use data with max_dep >= 50 to train
         data_list = [(meta, data) for (meta, data) in vae_train_data if meta["max_dep"] >= 50]
-        fill_rate = process_map(self.get_fill_rate, data_list, max_workers=16, chunksize=1000)
+        fill_rate = process_map(self.get_fill_rate, data_list, max_workers=16, chunksize=2000)
 
         # use data with fill rate >= 1 to train
         self.data_list = [data for data, rate in zip(data_list, fill_rate) if rate >= 1]
 
     @staticmethod
-    def get_fill_rate(data: tuple[pd.Series, pd.DataFrame]):
+    def get_fill_rate(data: tuple[dict, pd.DataFrame]):
         meta, data = data
         total = sum(data["dep"] <= meta["max_dep"])
         return len(data[data["dep"] <= meta["max_dep"]].dropna()) / total if total > 0 else 0
 
-    def preprocess(self, group: tuple[tuple, pd.DataFrame]):
-        meta, data = group
-        year, mon, lat, lon = meta
-        max_dep = self.df_dep.loc[(lon, lat), "dep"] if (lon, lat) in self.df_dep.index else 0
-        meta = pd.Series({"year": year, "mon": mon, "lat": lat, "lon": lon, "max_dep": max_dep})
-
-        return meta, data
-
     def __len__(self):
         return len(self.data_list)
 
-    def __getitem__(self, idx) -> tuple[pd.Series, pd.DataFrame]:
+    def __getitem__(self, idx) -> tuple[np.ndarray, dict]:
         meta, data = self.data_list[idx]
-        data = data.copy()
+        data: pd.DataFrame = data.copy()
         data[["oxy", "tmp", "sal"]] = (data[["oxy", "tmp", "sal"]] - self.mean) / self.std
-        return meta, data.reset_index(drop=True)
+
+        # origin value
+        meta["real"] = data.values[:, 1].copy()
+
+        # set value to nan and interpolate to simulate missing data
+        non_nan_idx = data.dropna().index
+        nan_cnt = round(len(non_nan_idx) * self.nan_rate)
+        random_nan_idx = data.iloc[non_nan_idx].sample(nan_cnt, replace=False).index
+        data.loc[random_nan_idx, ["oxy", "tmp", "sal"]] = np.nan
+        data = data.interpolate(method="linear", limit_direction="both")
+
+        return data.values[:, 1], meta
+
+
+class VAEDataModule(LightningDataModule):
+    def __init__(
+        self,
+        train_batch_size: int = 8,
+        val_batch_size: int = 8,
+        num_workers: int = 0,
+        pin_memory: bool = False,
+    ):
+        super().__init__()
+        self.train_batch_size = train_batch_size
+        self.val_batch_size = val_batch_size
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        self.dataset = VAEDataset()
+
+        train_idx, val_idx = train_test_split(range(len(self.dataset)), test_size=0.2, random_state=42)
+
+        self.train_dataset = Subset(self.dataset, train_idx)
+        self.val_dataset = Subset(self.dataset, val_idx)
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.train_batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            pin_memory=self.pin_memory,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.val_batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+            pin_memory=self.pin_memory,
+        )
+
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.val_dataset,
+            batch_size=144,
+            num_workers=self.num_workers,
+            shuffle=True,
+            pin_memory=self.pin_memory,
+        )

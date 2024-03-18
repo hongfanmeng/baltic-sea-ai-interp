@@ -1,0 +1,25 @@
+model_params:
+  name: "VAE"
+  in_channels: 30
+  latent_dim: 5
+
+data_params:
+  train_batch_size: 64
+  val_batch_size: 64
+  num_workers: 16
+
+exp_params:
+  LR: 0.001
+  weight_decay: 0.0
+  scheduler_gamma: 0.97
+  kld_weight: 0.0005
+  manual_seed: 1265
+  missing_rate: 0.5
+
+trainer_params:
+  accelerator: "gpu"
+  max_epochs: 100
+
+logging_params:
+  save_dir: "logs/"
+  name: "VAE"
