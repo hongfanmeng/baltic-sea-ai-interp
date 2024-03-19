@@ -1,12 +1,12 @@
 import pickle
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
 from pytorch_lightning import LightningDataModule
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Dataset
 from tqdm.contrib.concurrent import process_map
 
 base_dir = Path(__file__).resolve().parent.parent.parent
@@ -46,21 +46,35 @@ class BalticSeaDataset(Dataset):
 
 
 class VAEDataset(Dataset):
-    def __init__(self, nan_rate=0.5):
+    vae_data_list = None
+
+    def __init__(self, nan_rate=0.5, split: Literal["train", "test"] = "train", test_size=0.2):
+        self.mean, self.std = read_mean_std()
         self.nan_rate = nan_rate
 
+        data_list = self.get_vae_train_data()
+        train_data, test_data = train_test_split(data_list, test_size=test_size)
+        self.data_list = train_data if split == "train" else test_data
+
+    @staticmethod
+    def get_vae_train_data():
+        if VAEDataset.vae_data_list:
+            return VAEDataset.vae_data_list
+
         print("reading data...")
-        self.df_dep = read_depth()
-        self.mean, self.std = read_mean_std()
         vae_train_data = pd.read_pickle("data/vae_train_data.pkl")
 
         print("filtering data for training...")
         # use data with max_dep >= 50 to train
-        data_list = [(meta, data) for (meta, data) in vae_train_data if meta["max_dep"] >= 50]
-        fill_rate = process_map(self.get_fill_rate, data_list, max_workers=16, chunksize=2000)
+        vae_data_list = [(meta, data) for (meta, data) in vae_train_data if meta["max_dep"] >= 50]
+        fill_rate = process_map(VAEDataset.get_fill_rate, vae_data_list, max_workers=16, chunksize=2000)
 
         # use data with fill rate >= 1 to train
-        self.data_list = [data for data, rate in zip(data_list, fill_rate) if rate >= 1]
+        vae_data_list = [data for data, rate in zip(vae_data_list, fill_rate) if rate >= 1]
+
+        # save to static variable
+        VAEDataset.vae_data_list = vae_data_list
+        return vae_data_list
 
     @staticmethod
     def get_fill_rate(data: tuple[dict, pd.DataFrame]):
@@ -96,20 +110,18 @@ class VAEDataModule(LightningDataModule):
         val_batch_size: int = 8,
         num_workers: int = 0,
         pin_memory: bool = False,
+        nan_rate: float = 0.7,
     ):
         super().__init__()
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.nan_rate = nan_rate
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.dataset = VAEDataset()
-
-        train_idx, val_idx = train_test_split(range(len(self.dataset)), test_size=0.2, random_state=42)
-
-        self.train_dataset = Subset(self.dataset, train_idx)
-        self.val_dataset = Subset(self.dataset, val_idx)
+        self.train_dataset = VAEDataset(nan_rate=self.nan_rate, split="train")
+        self.val_dataset = VAEDataset(nan_rate=self.nan_rate, split="test")
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -132,7 +144,7 @@ class VAEDataModule(LightningDataModule):
     def test_dataloader(self) -> DataLoader:
         return DataLoader(
             self.val_dataset,
-            batch_size=144,
+            batch_size=128,
             num_workers=self.num_workers,
             shuffle=True,
             pin_memory=self.pin_memory,

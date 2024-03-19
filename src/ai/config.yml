@@ -6,15 +6,15 @@ model_params:
 data_params:
   train_batch_size: 64
   val_batch_size: 64
-  num_workers: 16
+  num_workers: 4
+  nan_rate: 0.7
 
 exp_params:
-  LR: 0.001
+  LR: 0.005
   weight_decay: 0.0
-  scheduler_gamma: 0.97
-  kld_weight: 0.0005
+  scheduler_gamma: 0.95
+  kld_weight: 0.00025
   manual_seed: 1265
-  missing_rate: 0.5
 
 trainer_params:
   accelerator: "gpu"

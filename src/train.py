@@ -6,10 +6,10 @@ from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from . import VAEDataModule, VAEXperiment, VanillaVAE
+from ai import VAEDataModule, VAEXperiment, VanillaVAE
 
 
-def load_conf(conf_file: str = Path(__file__).resolve().parent / "config.yml"):
+def load_conf(conf_file: str = Path(__file__).resolve().parent / "ai/config.yml"):
     with open(conf_file, "r") as file:
         try:
             config = yaml.safe_load(file)

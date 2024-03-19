@@ -11,7 +11,7 @@ class VanillaVAE(nn.Module):
         self.latent_dim = latent_dim
 
         if hidden_dims is None:
-            hidden_dims = [20, 20, 10]
+            hidden_dims = [40, 40, 40]
 
         # Build Encoder
         modules = []
@@ -72,9 +72,6 @@ class VanillaVAE(nn.Module):
         return eps * std + mu
 
     def forward(self, input: Tensor, meta: dict) -> List[Tensor]:
-        # print(input.shape)
-        # print(meta)
-        # print(input)
         mu, log_var = self.encode(input)
         z = self.reparameterize(mu, log_var)
         recons = self.decode(z)
