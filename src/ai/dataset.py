@@ -48,7 +48,13 @@ class BalticSeaDataset(Dataset):
 class VAEDataset(Dataset):
     vae_data_list = None
 
-    def __init__(self, nan_rate=0.5, split: Literal["train", "test"] = "train", test_size=0.2):
+    def __init__(
+        self,
+        split: Literal["train", "test"] = "train",
+        test_size=0.2,
+        nan_rate=0.7,
+    ):
+        self.df_dep = read_depth()
         self.mean, self.std = read_mean_std()
         self.nan_rate = nan_rate
 
@@ -67,7 +73,7 @@ class VAEDataset(Dataset):
         print("filtering data for training...")
         # use data with max_dep >= 50 to train
         vae_data_list = [(meta, data) for (meta, data) in vae_train_data if meta["max_dep"] >= 50]
-        fill_rate = process_map(VAEDataset.get_fill_rate, vae_data_list, max_workers=16, chunksize=2000)
+        fill_rate = process_map(VAEDataset.get_fill_rate, vae_data_list, max_workers=12, chunksize=2000)
 
         # use data with fill rate >= 1 to train
         vae_data_list = [data for data, rate in zip(vae_data_list, fill_rate) if rate >= 1]
@@ -99,6 +105,22 @@ class VAEDataset(Dataset):
         random_nan_idx = data.iloc[non_nan_idx].sample(nan_cnt, replace=False).index
         data.loc[random_nan_idx, ["oxy", "tmp", "sal"]] = np.nan
         data = data.interpolate(method="linear", limit_direction="both")
+
+        # save nan mask for testing
+        meta["nan_mask"] = np.zeros(len(data), dtype=bool)
+        meta["nan_mask"][random_nan_idx] = True
+
+        meta["x"] = np.cos(meta["lat"]) * np.cos(meta["lon"])
+        meta["y"] = np.cos(meta["lat"]) * np.sin(meta["lon"])
+        meta["z"] = np.sin(meta["lat"])
+
+        # normalized max depth
+        dep_mean = self.df_dep["dep"].mean()
+        dep_std = self.df_dep["dep"].std()
+        meta["max_dep_n"] = (meta["max_dep"] - dep_mean) / dep_std
+
+        # normalized month
+        meta["mon_n"] = np.abs(meta["mon"] - 6.5) / 5.5
 
         return data.values[:, 1], meta
 

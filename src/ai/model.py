@@ -6,9 +6,17 @@ from torch.nn import functional as F
 
 
 class VanillaVAE(nn.Module):
-    def __init__(self, in_channels: int, latent_dim: int, hidden_dims: List = None, **kwargs) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        latent_dim: int,
+        hidden_dims: List = None,
+        meta_dims: List = [],
+        **kwargs,
+    ) -> None:
         super(VanillaVAE, self).__init__()
         self.latent_dim = latent_dim
+        self.meta_dims = meta_dims
 
         if hidden_dims is None:
             hidden_dims = [40, 40, 40]
@@ -33,7 +41,7 @@ class VanillaVAE(nn.Module):
 
         # Build Decoder
         modules = []
-        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1])
+        self.decoder_input = nn.Linear(latent_dim + len(meta_dims), hidden_dims[-1])
         hidden_dims.reverse()
         for i in range(len(hidden_dims) - 1):
             modules.append(
@@ -74,6 +82,8 @@ class VanillaVAE(nn.Module):
     def forward(self, input: Tensor, meta: dict) -> List[Tensor]:
         mu, log_var = self.encode(input)
         z = self.reparameterize(mu, log_var)
+        if self.meta_dims:
+            z = torch.concat([z, *[meta[dim].unsqueeze(1).float() for dim in self.meta_dims]], dim=1)
         recons = self.decode(z)
         return [recons, input, mu, log_var, meta]
 

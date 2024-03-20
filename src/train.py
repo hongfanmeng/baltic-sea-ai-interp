@@ -38,7 +38,7 @@ if __name__ == "__main__":
     )
     data.setup()
 
-    runner = Trainer(
+    trainer = Trainer(
         logger=tb_logger,
         callbacks=[
             LearningRateMonitor(),
@@ -53,4 +53,4 @@ if __name__ == "__main__":
     )
 
     print(f"======= Training {config['model_params']['name']} =======")
-    runner.fit(experiment, datamodule=data)
+    trainer.fit(experiment, datamodule=data)

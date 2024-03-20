@@ -2,7 +2,7 @@ import numpy as np
 
 
 # Reference: https://archimer.ifremer.fr/doc/00287/39795/94062.pdf, page 10
-def calc_do_saturation(temp, sal, umol_L=False):
+def calc_do_saturation(temp, sal, umol_kg=False):
     A0 = 2.00907
     A1 = 3.22014
     A2 = 4.0501
@@ -30,7 +30,11 @@ def calc_do_saturation(temp, sal, umol_L=False):
         + C0 * sal**2
     )
 
-    if umol_L:
-        return do_saturation * 44.6596
+    if umol_kg:
+        return mg_L_to_umol_kg(do_saturation)
     else:
         return do_saturation
+
+
+def mg_L_to_umol_kg(oxy):
+    return oxy * 44.6596 / 1.4
