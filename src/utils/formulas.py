@@ -37,4 +37,4 @@ def calc_do_saturation(temp, sal, umol_kg=False):
 
 
 def mg_L_to_umol_kg(oxy):
-    return oxy * 44.6596 / 1.4
+    return oxy * 44.4 / 1.4

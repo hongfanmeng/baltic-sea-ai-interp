@@ -106,6 +106,9 @@ class VAEDataset(Dataset):
         data.loc[random_nan_idx, ["oxy", "tmp", "sal"]] = np.nan
         data = data.interpolate(method="linear", limit_direction="both")
 
+        # fill data which dep exceed max dep to 0
+        data[~data.index.isin(non_nan_idx)] = 0
+
         # save nan mask for testing
         meta["nan_mask"] = np.zeros(len(data), dtype=bool)
         meta["nan_mask"][random_nan_idx] = True
@@ -114,13 +117,13 @@ class VAEDataset(Dataset):
         meta["y"] = np.cos(meta["lat"]) * np.sin(meta["lon"])
         meta["z"] = np.sin(meta["lat"])
 
-        # normalized max depth
-        dep_mean = self.df_dep["dep"].mean()
-        dep_std = self.df_dep["dep"].std()
-        meta["max_dep_n"] = (meta["max_dep"] - dep_mean) / dep_std
+        # # normalized max depth
+        # dep_mean = self.df_dep["dep"].mean()
+        # dep_std = self.df_dep["dep"].std()
+        # meta["max_dep_n"] = (meta["max_dep"] - dep_mean) / dep_std
 
-        # normalized month
-        meta["mon_n"] = np.abs(meta["mon"] - 6.5) / 5.5
+        # # normalized month
+        # meta["mon_n"] = np.abs(meta["mon"] - 6.5) / 5.5
 
         return data.values[:, 1], meta
 
