@@ -1,25 +1,23 @@
 from typing import List
 
+import pytorch_lightning as pl
 import torch
-from torch import Tensor, nn
+from torch import Tensor, nn, optim
 from torch.nn import functional as F
 
 
-class VanillaVAE(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        latent_dim: int,
-        hidden_dims: List = None,
-        meta_dims: List = [],
-        **kwargs,
-    ) -> None:
+class VanillaVAE(pl.LightningModule):
+    def __init__(self, **kwargs) -> None:
         super(VanillaVAE, self).__init__()
-        self.latent_dim = latent_dim
-        self.meta_dims = meta_dims
+        self.save_hyperparameters()
+        self.train_params: dict = kwargs["train_params"]
+        self.model_params: dict = kwargs["model_params"]
 
-        if hidden_dims is None:
-            hidden_dims = [40, 40, 40]
+        self.latent_dim: int = self.model_params["latent_dim"]
+        self.meta_dims: list[str] = self.model_params["meta_dims"]
+
+        in_channels: int = self.model_params["in_channels"]
+        hidden_dims = [40, 40, 40]
 
         # Build Encoder
         modules = []
@@ -36,12 +34,12 @@ class VanillaVAE(nn.Module):
         self.encoder = nn.Sequential(*modules)
 
         # mu, sigma
-        self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
-        self.fc_var = nn.Linear(hidden_dims[-1], latent_dim)
+        self.fc_mu = nn.Linear(hidden_dims[-1], self.latent_dim)
+        self.fc_var = nn.Linear(hidden_dims[-1], self.latent_dim)
 
         # Build Decoder
         modules = []
-        self.decoder_input = nn.Linear(latent_dim + len(meta_dims), hidden_dims[-1])
+        self.decoder_input = nn.Linear(self.latent_dim + len(self.meta_dims), hidden_dims[-1])
         hidden_dims.reverse()
         for i in range(len(hidden_dims) - 1):
             modules.append(
@@ -111,3 +109,31 @@ class VanillaVAE(nn.Module):
             "Reconstruction_Loss_MAE": recons_loss_mae.detach(),
             "KLD": -kld_loss.detach(),
         }
+
+    def training_step(self, batch, batch_idx):
+        input, meta = batch
+
+        results = self.forward(input, meta=meta)
+        train_loss = self.loss_function(*results, M_N=self.train_params["kld_weight"])
+
+        self.log_dict({key: val.item() for key, val in train_loss.items()}, sync_dist=True)
+
+        return train_loss["loss"]
+
+    def validation_step(self, batch, batch_idx):
+        input, meta = batch
+
+        results = self.forward(input, meta=meta)
+        val_loss = self.loss_function(*results, M_N=1.0)
+
+        self.log_dict({f"val_{key}": val.item() for key, val in val_loss.items()}, sync_dist=True)
+
+    def configure_optimizers(self):
+        optimizer = optim.Adam(
+            self.parameters(),
+            lr=self.train_params["LR"],
+            weight_decay=self.train_params["weight_decay"],
+        )
+        scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=self.train_params["scheduler_gamma"])
+
+        return [optimizer], [scheduler]

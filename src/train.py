@@ -6,10 +6,10 @@ from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from ai import VAEDataModule, VAEXperiment, VanillaVAE
+from vae import VAEDataModule, VanillaVAE
 
 
-def load_conf(conf_file: str = Path(__file__).resolve().parent / "ai/config.yml"):
+def load_conf(conf_file: str = Path(__file__).resolve().parent / "vae/config.yml"):
     with open(conf_file, "r") as file:
         try:
             config = yaml.safe_load(file)
@@ -27,10 +27,9 @@ if __name__ == "__main__":
     )
 
     # For reproducibility
-    seed_everything(config["exp_params"]["manual_seed"], True)
+    seed_everything(config["train_params"]["manual_seed"], True)
 
-    model = VanillaVAE(**config["model_params"])
-    experiment = VAEXperiment(model, **config)
+    model = VanillaVAE(**config)
 
     data = VAEDataModule(
         **config["data_params"],
@@ -53,4 +52,4 @@ if __name__ == "__main__":
     )
 
     print(f"======= Training {config['model_params']['name']} =======")
-    trainer.fit(experiment, datamodule=data)
+    trainer.fit(model, datamodule=data)

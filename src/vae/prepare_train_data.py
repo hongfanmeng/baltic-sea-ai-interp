@@ -79,14 +79,29 @@ def convert_vae_data(data_entry: tuple[tuple, pd.DataFrame]):
 def prepare_vae_data(train_data: pd.DataFrame):
     data_list = train_data.groupby(["year", "mon", "lat", "lon"])
     vae_train_data = process_map(convert_vae_data, data_list, max_workers=12, chunksize=10000)
-    return vae_train_data
+
+    results = []
+    for meta, data in tqdm(vae_train_data):
+        df: pd.DataFrame = data.copy()
+        df[["year", "mon", "lat", "lon", "max_dep"]] = (
+            meta["year"],
+            meta["mon"],
+            meta["lat"],
+            meta["lon"],
+            meta["max_dep"],
+        )
+        results.append(df)
+    df_vae_train = pd.concat(results)
+
+    return vae_train_data, df_vae_train
 
 
 if __name__ == "__main__":
     mean, std, train_data = prepare_train_data()
-    vae_train_data = prepare_vae_data(train_data)
+    vae_train_data, df_vae_train = prepare_vae_data(train_data)
 
     pd.to_pickle((mean, std), base_dir / "data/train_mean_std.pkl")
     train_data.to_parquet(base_dir / "data/train_data.parquet")
 
     pd.to_pickle(vae_train_data, base_dir / "data/vae_train_data.pkl")
+    df_vae_train.to_parquet(base_dir / "data/vae_data.parquet")

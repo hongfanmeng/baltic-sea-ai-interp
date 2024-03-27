@@ -13,7 +13,7 @@ data_params:
   num_workers: 4
   nan_rate: 0.7
 
-exp_params:
+train_params:
   LR: 0.005
   weight_decay: 0.0
   scheduler_gamma: 0.95
