@@ -1,4 +1,6 @@
 import pickle
+from functools import cache
+from multiprocessing import Manager
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -12,6 +14,8 @@ from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 base_dir = Path(__file__).resolve().parent.parent.parent
+
+manager = Manager()
 
 
 def read_depth():
@@ -42,34 +46,21 @@ class MLPDataset(Dataset):
     YEAR_START = 1960
     YEAR_END = 2020
 
-    # kdtree and coordinates for each year
-    data_mapping = None
-
-    # data from vae_data.parquet and grouped by year, lat, lon,
-    vae_data_list: list[tuple[tuple, pd.DataFrame]] | None = None
-    fill_rate_list: list[float] | None = None
-
-    # data with fill rate >= 1, max_dep >= 20, as the MLP output
-    mlp_train_data_out: list[tuple[tuple, pd.DataFrame]] | None = None
-
-    # data with fill rate >= 0.3, max_dep >= 20, as the MLP input
-    mlp_train_data_in: pd.DataFrame | None = None
+    # shared memory cache of dataset
+    dataset_cache = manager.dict()
 
     def __init__(self, split: Literal["train", "test"] = "train", test_size=0.2, neighbor_size=5):
         self.mean, self.std = read_mean_std()
         self.neighbor_size = neighbor_size
-        self.data_mapping = MLPDataset.get_data_mapping()
-        self.df_vae_train = read_vae_data()
+        self.data_mapping = self.get_data_mapping()
 
         _, mlp_train_data_out = self.get_mlp_train_data()
         train_data, test_data = train_test_split(mlp_train_data_out, test_size=test_size)
         self.data_list = train_data if split == "train" else test_data
 
     @staticmethod
+    @cache
     def get_data_mapping():
-        if MLPDataset.data_mapping is not None:
-            return MLPDataset.data_mapping
-
         mlp_train_data_in, _ = MLPDataset.get_mlp_train_data()
 
         print("Building kdtree for each year...")
@@ -83,44 +74,48 @@ class MLPDataset(Dataset):
             data_mapping["trees"][year] = tree
             data_mapping["coords"][year] = coords
 
-        MLPDataset.data_mapping = data_mapping
         return data_mapping
 
     @staticmethod
+    @cache
     def get_mlp_train_data():
-        if MLPDataset.mlp_train_data_out is None:
-            data_list = MLPDataset.get_vae_data_list(fill_rate=1)
-            data_list = [(meta, df) for meta, df in data_list if df["max_dep"].iloc[0] >= 20]
-            MLPDataset.mlp_train_data_out = data_list
+        data_list = MLPDataset.filter_data_list(fill_rate=1)
+        data_list = [(meta, df) for meta, df in data_list if df["max_dep"].iloc[0] >= 20]
+        mlp_train_data_out = data_list
 
-        if MLPDataset.mlp_train_data_in is None:
-            data_list = MLPDataset.get_vae_data_list(fill_rate=0.3)
-            data_list = [(meta, df) for meta, df in data_list if df["max_dep"].iloc[0] >= 20]
-            df = pd.concat([df for meta, df in data_list])
-            df = df.set_index(["year", "lat", "lon"])
-            MLPDataset.mlp_train_data_in = df
+        data_list = MLPDataset.filter_data_list(fill_rate=0.3)
+        data_list = [(meta, df) for meta, df in data_list if df["max_dep"].iloc[0] >= 20]
+        df = pd.concat([df for meta, df in data_list])
+        df = df.set_index(["year", "lat", "lon"])
+        mlp_train_data_in = df
 
-        return MLPDataset.mlp_train_data_in, MLPDataset.mlp_train_data_out
+        return mlp_train_data_in, mlp_train_data_out
 
     @staticmethod
-    def get_vae_data_list(fill_rate: float | None = None):
-        if MLPDataset.vae_data_list is None:
-            print("Reading profile data...", end=" ")
-            vae_data = read_vae_data().reset_index()
-            vae_data = vae_data[vae_data["year"].between(MLPDataset.YEAR_START, MLPDataset.YEAR_END)]
-            data_list = list(vae_data.groupby(["year", "lat", "lon"]))
-            print("done")
+    @cache
+    def get_data_list():
+        print("Reading profile data...", end=" ")
+        vae_data = read_vae_data().reset_index()
+        vae_data = vae_data[vae_data["year"].between(MLPDataset.YEAR_START, MLPDataset.YEAR_END)]
+        data_list = list(vae_data.groupby(["year", "lat", "lon"]))
+        print("done")
+        return data_list
 
-            print("Calculating fill rate for each profile...")
-            fill_rate_list = process_map(MLPDataset.get_fill_rate, data_list, max_workers=12, chunksize=5000)
-            MLPDataset.vae_data_list = data_list
-            MLPDataset.fill_rate_list = fill_rate_list
+    @staticmethod
+    @cache
+    def get_fill_rate_list():
+        data_list = MLPDataset.get_data_list()
+        print("Calculating fill rate for each profile...")
+        fill_rate_list = process_map(MLPDataset.get_fill_rate, data_list, max_workers=12, chunksize=5000)
+        return fill_rate_list
 
-        data_list = [
-            data
-            for data, rate in zip(MLPDataset.vae_data_list, MLPDataset.fill_rate_list)
-            if not fill_rate or rate >= fill_rate
-        ]
+    @staticmethod
+    @cache
+    def filter_data_list(fill_rate: float | None = None):
+        vae_data_list = MLPDataset.get_data_list()
+        fill_rate_list = MLPDataset.get_fill_rate_list()
+
+        data_list = [data for data, rate in zip(vae_data_list, fill_rate_list) if not fill_rate or rate >= fill_rate]
 
         return data_list
 
@@ -131,10 +126,9 @@ class MLPDataset(Dataset):
         total = sum(df["dep"] <= max_dep)
         return len(df[df["dep"] <= max_dep].dropna()) / total if total > 0 else 0
 
-    @staticmethod
-    def get_neighbors(year: int, lat: float, lon: float, k: int):
-        tree = MLPDataset.data_mapping["trees"][year]
-        coords = MLPDataset.data_mapping["coords"][year]
+    def get_neighbors(self, year: int, lat: float, lon: float, k: int):
+        tree = self.data_mapping["trees"][year]
+        coords = self.data_mapping["coords"][year]
         neighbors = tree.query([[lat, lon]], k=k + 1, return_distance=False)
         neighbors_coords = coords[neighbors[0]]
         return neighbors_coords[1:]
@@ -142,7 +136,12 @@ class MLPDataset(Dataset):
     def __len__(self):
         return len(self.data_list)
 
+    @cache
     def __getitem__(self, idx) -> tuple[np.ndarray, dict]:
+        # return cached data if available
+        if idx in MLPDataset.dataset_cache:
+            return MLPDataset.dataset_cache[idx]
+
         meta, data = self.data_list[idx]
         year, lat, lon = meta
         max_dep = data["max_dep"].iloc[0]
@@ -157,9 +156,10 @@ class MLPDataset(Dataset):
         label["z"] = np.sin(lat)
 
         inputs = []
+        mlp_train_data_in, _ = self.get_mlp_train_data()
         neighbors = self.get_neighbors(year, lat, lon, k=self.neighbor_size)
         for lat, lon in neighbors:
-            neighbor_data = self.mlp_train_data_in.loc[(year, lat, lon)]
+            neighbor_data: pd.DataFrame = mlp_train_data_in.loc[(year, lat, lon)]
             neighbor_data = neighbor_data.copy()
 
             # normalize
@@ -182,6 +182,7 @@ class MLPDataset(Dataset):
 
             inputs.append([dx, dy, dz] + neighbor_data["oxy"].values.tolist())
 
+        MLPDataset.dataset_cache[idx] = (np.array(inputs), label)
         return np.array(inputs), label
 
 

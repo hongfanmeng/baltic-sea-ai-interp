@@ -1,13 +1,23 @@
 import os
+import warnings
 from pathlib import Path
 
 import yaml
-from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning import Callback, Trainer, seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from mlp import InterpMLP, MLPDataModule
 from vae import VanillaVAE
+
+
+class UpdateParams(Callback):
+    def on_train_epoch_end(self, trainer: Trainer, _) -> None:
+        trainer.train_dataloader.num_workers = 0
+
+    def on_validation_epoch_end(self, trainer: Trainer, _) -> None:
+        trainer.val_dataloaders.num_workers = 0
+
 
 base_dir = Path(__file__).resolve().parent.parent
 
@@ -41,6 +51,7 @@ if __name__ == "__main__":
     trainer = Trainer(
         logger=tb_logger,
         callbacks=[
+            UpdateParams(),
             LearningRateMonitor(),
             ModelCheckpoint(
                 save_top_k=2,
@@ -52,5 +63,6 @@ if __name__ == "__main__":
         **config["trainer_params"],
     )
 
+    warnings.filterwarnings("ignore", ".*does not have many workers.*")
     print(f"======= Training {config['model_params']['name']} =======")
     trainer.fit(mlp_model, datamodule=data)
