@@ -80,6 +80,14 @@ class InterpMLP(pl.LightningModule):
 
         return train_loss["loss"]
 
+    def validation_step(self, batch):
+        input, label = batch
+
+        results = self.forward(input, label=label)
+        val_loss = self.loss_function(*results)
+
+        self.log_dict({f"val_{key}": val.item() for key, val in val_loss.items()}, sync_dist=True)
+
     def configure_optimizers(self):
         optimizer = optim.Adam(
             self.parameters(),
