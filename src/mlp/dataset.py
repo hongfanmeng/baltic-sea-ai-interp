@@ -46,13 +46,13 @@ class MLPDataset(Dataset):
     YEAR_START = 1960
     YEAR_END = 2020
 
-    # shared memory cache of dataset
-    dataset_cache = manager.dict()
-
     def __init__(self, split: Literal["train", "test"] = "train", test_size=0.2, neighbor_size=5):
         self.mean, self.std = read_mean_std()
         self.neighbor_size = neighbor_size
         self.data_mapping = self.get_data_mapping()
+
+        # shared memory cache of dataset
+        self.dataset_cache = manager.dict()
 
         _, mlp_train_data_out = self.get_mlp_train_data()
         train_data, test_data = train_test_split(mlp_train_data_out, test_size=test_size)
@@ -139,8 +139,8 @@ class MLPDataset(Dataset):
     @cache
     def __getitem__(self, idx) -> tuple[np.ndarray, dict]:
         # return cached data if available
-        if idx in MLPDataset.dataset_cache:
-            return MLPDataset.dataset_cache[idx]
+        if idx in self.dataset_cache:
+            return self.dataset_cache[idx]
 
         meta, data = self.data_list[idx]
         year, lat, lon = meta
@@ -182,7 +182,7 @@ class MLPDataset(Dataset):
 
             inputs.append([dx, dy, dz] + neighbor_data["oxy"].values.tolist())
 
-        MLPDataset.dataset_cache[idx] = (np.array(inputs), label)
+        self.dataset_cache[idx] = (np.array(inputs), label)
         return np.array(inputs), label
 
 
