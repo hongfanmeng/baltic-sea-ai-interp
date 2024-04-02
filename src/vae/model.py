@@ -93,21 +93,27 @@ class VanillaVAE(pl.LightningModule):
         recons, input, mu, log_var, meta = args[:5]
 
         real = meta["real"]
-        real_filled = torch.where(torch.isnan(real), recons, real)
+        kld_weight = kwargs["M_N"]
 
-        kld_weight = kwargs["M_N"]  # Account for the minibatch samples from the dataset
+        # loss only calc on non-nan values
+        mask = ~torch.isnan(real)
+        masked_recons = recons[mask]
+        masked_real = real[mask]
 
-        recons_loss = F.mse_loss(recons, real_filled)
-        recons_loss_mae = F.l1_loss(recons, real_filled)
+        recons_loss = F.mse_loss(masked_recons, masked_real)
+        recons_mae = F.l1_loss(masked_recons, masked_real)
+        recons_mape = torch.mean(torch.abs((masked_recons - masked_real) / masked_real))
 
         kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu**2 - log_var.exp(), dim=1), dim=0)
 
         loss = recons_loss + kld_weight * kld_loss
+
         return {
             "loss": loss,
-            "Reconstruction_Loss": recons_loss.detach(),
-            "Reconstruction_Loss_MAE": recons_loss_mae.detach(),
-            "KLD": -kld_loss.detach(),
+            "recons_mse": recons_loss.detach(),
+            "recons_mae": recons_mae.detach(),
+            "recons_mape": recons_mape.detach(),
+            "kld": -kld_loss.detach(),
         }
 
     def training_step(self, batch, batch_idx):
@@ -127,6 +133,14 @@ class VanillaVAE(pl.LightningModule):
         val_loss = self.loss_function(*results, M_N=1.0)
 
         self.log_dict({f"val_{key}": val.item() for key, val in val_loss.items()}, sync_dist=True)
+
+    def test_step(self, batch, batch_idx):
+        input, meta = batch
+
+        results = self.forward(input, meta=meta)
+        test_loss = self.loss_function(*results, M_N=1.0)
+
+        self.log_dict({f"test_{key}": val.item() for key, val in test_loss.items()}, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(

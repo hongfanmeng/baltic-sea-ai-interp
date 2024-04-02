@@ -63,12 +63,17 @@ class InterpMLP(pl.LightningModule):
         output, label = args
 
         real = label["real"]
-        real_filled = torch.where(torch.isnan(real), output, real)
 
-        mse = F.mse_loss(output, real_filled)
-        mae = F.l1_loss(output, real_filled)
+        # loss only calc on non-nan values
+        mask = ~torch.isnan(real)
+        masked_output = output[mask]
+        masked_real = real[mask]
 
-        return {"loss": mse, "mae": mae}
+        mse = F.mse_loss(masked_output, masked_real)
+        mae = F.l1_loss(masked_output, masked_real)
+        mape = torch.mean(torch.abs((masked_output - masked_real) / masked_real))
+
+        return {"loss": mse, "mae": mae, "mape": mape}
 
     def training_step(self, batch):
         input, label = batch
