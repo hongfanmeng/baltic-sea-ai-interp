@@ -87,6 +87,8 @@ class MLPDataset(Dataset):
         data_list = [(meta, df) for meta, df in data_list if df["max_dep"].iloc[0] >= 20]
         df = pd.concat([df for meta, df in data_list])
         df = df.set_index(["year", "lat", "lon"])
+        # remove input which exists in output, meta = (year, lat, lon)
+        df = df.drop(index=[meta for meta, _ in mlp_train_data_out])
         mlp_train_data_in = df
 
         return mlp_train_data_in, mlp_train_data_out
@@ -129,9 +131,9 @@ class MLPDataset(Dataset):
     def get_neighbors(self, year: int, lat: float, lon: float, k: int):
         tree = self.data_mapping["trees"][year]
         coords = self.data_mapping["coords"][year]
-        neighbors = tree.query([[lat, lon]], k=k + 1, return_distance=False)
+        neighbors = tree.query([[lat, lon]], k=k, return_distance=False)
         neighbors_coords = coords[neighbors[0]]
-        return neighbors_coords[1:]
+        return neighbors_coords
 
     def __len__(self):
         return len(self.data_list)
