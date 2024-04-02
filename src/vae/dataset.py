@@ -1,4 +1,5 @@
 import pickle
+from functools import cache
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -46,8 +47,6 @@ class BalticSeaDataset(Dataset):
 
 
 class VAEDataset(Dataset):
-    vae_data_list = None
-
     def __init__(
         self,
         split: Literal["train", "test"] = "train",
@@ -63,10 +62,8 @@ class VAEDataset(Dataset):
         self.data_list = train_data if split == "train" else test_data
 
     @staticmethod
+    @cache
     def get_vae_train_data():
-        if VAEDataset.vae_data_list:
-            return VAEDataset.vae_data_list
-
         print("reading data...")
         vae_train_data = pd.read_pickle("data/vae_train_data.pkl")
 
@@ -78,8 +75,6 @@ class VAEDataset(Dataset):
         # use data with fill rate >= 1 to train
         vae_data_list = [data for data, rate in zip(vae_data_list, fill_rate) if rate >= 1]
 
-        # save to static variable
-        VAEDataset.vae_data_list = vae_data_list
         return vae_data_list
 
     @staticmethod
@@ -116,14 +111,6 @@ class VAEDataset(Dataset):
         meta["x"] = np.cos(meta["lat"]) * np.cos(meta["lon"])
         meta["y"] = np.cos(meta["lat"]) * np.sin(meta["lon"])
         meta["z"] = np.sin(meta["lat"])
-
-        # # normalized max depth
-        # dep_mean = self.df_dep["dep"].mean()
-        # dep_std = self.df_dep["dep"].std()
-        # meta["max_dep_n"] = (meta["max_dep"] - dep_mean) / dep_std
-
-        # # normalized month
-        # meta["mon_n"] = np.abs(meta["mon"] - 6.5) / 5.5
 
         return data.values[:, 1], meta
 
@@ -171,6 +158,6 @@ class VAEDataModule(LightningDataModule):
             self.val_dataset,
             batch_size=128,
             num_workers=self.num_workers,
-            shuffle=True,
+            shuffle=False,
             pin_memory=self.pin_memory,
         )
