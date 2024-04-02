@@ -17,7 +17,7 @@ train_params:
   LR: 0.005
   weight_decay: 0.0
   scheduler_gamma: 0.95
-  manual_seed: 1265
+  manual_seed: 1896
 
 trainer_params:
   accelerator: "gpu"
