@@ -1,0 +1,29 @@
+model_params:
+  name: "RNN"
+  in_channels: 8 # latent 5 + meta 3 (dx, dy, dz)
+  out_channels: 5 # latent 5
+  meta_dims: # dims adding to decoder
+    - "x"
+    - "y"
+    - "z"
+
+data_params:
+  train_batch_size: 64
+  val_batch_size: 64
+  num_workers: 12
+  neighbor_size: 15
+  past_years: 5
+
+train_params:
+  LR: 0.005
+  weight_decay: 0.0
+  scheduler_gamma: 0.95
+  manual_seed: 1896
+
+trainer_params:
+  accelerator: "gpu"
+  max_epochs: 150
+
+logging_params:
+  save_dir: "logs/"
+  name: "RNN"
