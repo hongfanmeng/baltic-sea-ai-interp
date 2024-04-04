@@ -2,6 +2,8 @@ model_params:
   name: "RNN"
   in_channels: 8 # latent 5 + meta 3 (dx, dy, dz)
   out_channels: 5 # latent 5
+  hidden_size: 200
+  num_layers: 3
   meta_dims: # dims adding to decoder
     - "x"
     - "y"
@@ -10,9 +12,9 @@ model_params:
 data_params:
   train_batch_size: 64
   val_batch_size: 64
-  num_workers: 12
+  num_workers: 16
   neighbor_size: 15
-  past_years: 5
+  year_steps: 5
 
 train_params:
   LR: 0.005

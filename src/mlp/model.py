@@ -26,8 +26,8 @@ class InterpMLP(pl.LightningModule):
         self.meta_dims = self.model_params["meta_dims"]
 
         in_channels = self.model_params["in_channels"]
-        neighbor_size = self.data_params["neighbor_size"]
         out_channels = self.model_params["out_channels"]
+        neighbor_size = self.data_params["neighbor_size"]
 
         # MLP Model
         modules = []
@@ -42,10 +42,15 @@ class InterpMLP(pl.LightningModule):
             )
             cur_features = h_dim
 
-        self.first_layer = nn.Flatten()
+        self.mlp_in_flatten = nn.Flatten(start_dim=2)
         self.mlp_model = nn.Sequential(*modules, nn.Linear(cur_features, out_channels))
 
     def forward(self, input: Tensor, label: dict) -> list[Tensor]:
+        """
+        Args:
+            input (Tensor): (batch_size, neighbor, features), features[:3] = (dx, dy, dz), features[3:] = oxy
+            label (dict): keys: year, lat, lon, max_dep, real, x, y, z
+        """
         mu, log_var = self.vae_model.encode(input[:, :, 3:].float())
         encoder_output = self.vae_model.reparameterize(mu, log_var)
 

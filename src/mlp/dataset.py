@@ -47,13 +47,14 @@ class MLPDataset(Dataset):
     YEAR_END = 2020
 
     def __init__(self, split: Literal["train", "test"] = "train", test_size=0.2, neighbor_size=5):
-        self.mean, self.std = read_mean_std()
         self.neighbor_size = neighbor_size
-        self.data_mapping = self.get_data_mapping()
 
         # shared memory cache of dataset
         self.dataset_cache = manager.dict()
 
+        # load data
+        self.mean, self.std = read_mean_std()
+        self.data_mapping = self.get_data_mapping()
         _, mlp_train_data_out = self.get_mlp_train_data()
         train_data, test_data = train_test_split(mlp_train_data_out, test_size=test_size)
         self.data_list = train_data if split == "train" else test_data

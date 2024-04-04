@@ -7,12 +7,7 @@ from vae import VanillaVAE
 
 
 class InterpRNN(pl.LightningModule):
-    def __init__(
-        self,
-        vae_model: VanillaVAE,
-        hidden_channels: list[int] = [100, 100, 100],
-        **kwargs,
-    ) -> None:
+    def __init__(self, vae_model: VanillaVAE, **kwargs) -> None:
         super(InterpRNN, self).__init__()
         self.save_hyperparameters(ignore="vae_model")
 
@@ -24,24 +19,25 @@ class InterpRNN(pl.LightningModule):
         self.data_params = kwargs["data_params"]
         self.train_params = kwargs["train_params"]
         self.meta_dims = self.model_params["meta_dims"]
+        self.year_steps = self.data_params["year_steps"]
 
         in_channels = self.model_params["in_channels"]
         out_channels = self.model_params["out_channels"]
         neighbor_size = self.data_params["neighbor_size"]
-        past_years = self.data_params["past_years"]
+        hidden_size = self.model_params["hidden_size"]
+        num_layers = self.model_params["num_layers"]
 
         # RNN Model
         self.rnn_input_layer = nn.Flatten(start_dim=2)
         self.rnn_model = nn.LSTM(
             input_size=in_channels * neighbor_size,
-            hidden_size=100,
-            num_layers=3,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
             batch_first=True,
         )
         self.rnn_output_layer = nn.Sequential(
             nn.Flatten(start_dim=1),
-            nn.LeakyReLU(),
-            nn.Linear(100 * past_years, out_channels),
+            nn.Linear(hidden_size * self.year_steps, out_channels),
         )
 
     def forward(self, input: Tensor, label: dict) -> list[Tensor]:
@@ -54,9 +50,9 @@ class InterpRNN(pl.LightningModule):
         encoder_output = self.vae_model.reparameterize(mu, log_var)
 
         rnn_input = torch.cat([encoder_output, input[:, :, :, :3].float()], dim=3)
-        rnn_input = self.rnn_input_layer(rnn_input)
+        rnn_input: Tensor = self.rnn_input_layer(rnn_input)
 
-        rnn_output, _ = self.rnn_model(rnn_input)
+        rnn_output, hx = self.rnn_model(rnn_input)
         rnn_output = self.rnn_output_layer(rnn_output)
 
         meta_data = [label[dim].unsqueeze(1).float() for dim in self.meta_dims]

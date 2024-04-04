@@ -54,11 +54,11 @@ class RNNDataset(Dataset):
         split: Literal["train", "test"] = "train",
         test_size=0.2,
         neighbor_size=5,
-        past_years=5,
+        year_steps=5,
     ):
         # save params
         self.neighbor_size = neighbor_size
-        self.past_years = past_years
+        self.year_steps = year_steps
 
         # shared memory cache of dataset
         self.dataset_cache = manager.dict()
@@ -116,6 +116,11 @@ class RNNDataset(Dataset):
     def get_data_list():
         print("Reading profile data...", end=" ")
         vae_data = read_vae_data().reset_index()
+
+        # normalize data
+        mean, std = read_mean_std()
+        vae_data[["oxy", "tmp", "sal"]] = (vae_data[["oxy", "tmp", "sal"]] - mean) / std
+
         data_list = list(vae_data.groupby(["year", "lat", "lon"]))
         print("done")
         return data_list
@@ -167,27 +172,24 @@ class RNNDataset(Dataset):
         label = {"year": year, "lat": lat, "lon": lon, "max_dep": max_dep}
 
         data: pd.DataFrame = data.copy()
-        data[["oxy", "tmp", "sal"]] = (data[["oxy", "tmp", "sal"]] - self.mean) / self.std
         label["real"] = data["oxy"].values
 
         label["x"] = np.cos(lat) * np.cos(lon)
         label["y"] = np.cos(lat) * np.sin(lon)
         label["z"] = np.sin(lat)
 
-        inputs = []
+        inputs = np.zeros((self.year_steps, self.neighbor_size, 3 + 30))
         mlp_train_data_in, _ = self.get_mlp_train_data()
-        for year_past in range(year - self.past_years + 1, year + 1):
-            neighbors = self.get_neighbors(year_past, lat, lon, k=self.neighbor_size)
-            inputs.append([])
-            for lat, lon in neighbors:
-                neighbor_data: pd.DataFrame = mlp_train_data_in.loc[(year_past, lat, lon)]
+
+        # e.g. year_steps = 5, calc past 4 year and current year
+        for y_idx, year_input in enumerate(range(year - self.year_steps + 1, year + 1)):
+            neighbors = self.get_neighbors(year_input, lat, lon, k=self.neighbor_size)
+            for n_idx, (lat, lon) in enumerate(neighbors):
+                neighbor_data: pd.DataFrame = mlp_train_data_in.loc[(year_input, lat, lon)]
                 neighbor_data = neighbor_data.copy()
 
-                # normalize
-                neighbor_data[["oxy", "tmp", "sal"]] = (neighbor_data[["oxy", "tmp", "sal"]] - self.mean) / self.std
-
                 # interpolate for VAE input
-                neighbor_data = neighbor_data.interpolate(method="linear", limit_direction="both")
+                neighbor_data["oxy"] = neighbor_data["oxy"].interpolate(method="linear", limit_direction="both")
 
                 # set depth > max_dep to 0
                 max_dep = neighbor_data["max_dep"].iloc[0]
@@ -201,10 +203,14 @@ class RNNDataset(Dataset):
                 dy = y - label["y"]
                 dz = z - label["z"]
 
-                inputs[-1].append([dx, dy, dz] + neighbor_data["oxy"].values.tolist())
+                inputs[y_idx, n_idx, :3] = [dx, dy, dz]
+                inputs[y_idx, n_idx, 3:] = neighbor_data["oxy"].values
 
-        self.dataset_cache[idx] = (np.array(inputs), label)
-        return np.array(inputs), label
+        # shape: (year, neighbors, features)
+        inputs = np.array(inputs)
+
+        self.dataset_cache[idx] = (inputs, label)
+        return inputs, label
 
 
 class RNNDataModule(LightningDataModule):
@@ -215,7 +221,7 @@ class RNNDataModule(LightningDataModule):
         num_workers: int = 0,
         pin_memory: bool = False,
         neighbor_size: int = 5,
-        past_years: int = 5,
+        year_steps: int = 5,
     ):
         super().__init__()
         self.train_batch_size = train_batch_size
@@ -223,11 +229,11 @@ class RNNDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.neighbor_size = neighbor_size
-        self.past_years = past_years
+        self.year_steps = year_steps
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_dataset = RNNDataset(split="train", neighbor_size=self.neighbor_size, past_years=self.past_years)
-        self.val_dataset = RNNDataset(split="test", neighbor_size=self.neighbor_size, past_years=self.past_years)
+        self.train_dataset = RNNDataset(split="train", neighbor_size=self.neighbor_size, year_steps=self.year_steps)
+        self.val_dataset = RNNDataset(split="test", neighbor_size=self.neighbor_size, year_steps=self.year_steps)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(

@@ -1,7 +1,7 @@
 model_params:
   name: "VAE"
   in_channels: 30
-  latent_dim: 5
+  latent_dim: 10
   meta_dims:
     - "x"
     - "y"
