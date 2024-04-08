@@ -108,9 +108,9 @@ class VAEDataset(Dataset):
         meta["nan_mask"] = np.zeros(len(data), dtype=bool)
         meta["nan_mask"][random_nan_idx] = True
 
-        meta["x"] = np.cos(meta["lat"]) * np.cos(meta["lon"])
-        meta["y"] = np.cos(meta["lat"]) * np.sin(meta["lon"])
-        meta["z"] = np.sin(meta["lat"])
+        meta["x"] = np.cos(np.deg2rad(meta["lat"])) * np.cos(np.deg2rad(meta["lon"]))
+        meta["y"] = np.cos(np.deg2rad(meta["lat"])) * np.sin(np.deg2rad(meta["lon"]))
+        meta["z"] = np.sin(np.deg2rad(meta["lat"]))
 
         return data.values[:, 1], meta
 

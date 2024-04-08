@@ -174,9 +174,9 @@ class RNNDataset(Dataset):
         data: pd.DataFrame = data.copy()
         label["real"] = data["oxy"].values
 
-        label["x"] = np.cos(lat) * np.cos(lon)
-        label["y"] = np.cos(lat) * np.sin(lon)
-        label["z"] = np.sin(lat)
+        label["x"] = np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon))
+        label["y"] = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
+        label["z"] = np.sin(np.deg2rad(lat))
 
         inputs = np.zeros((self.year_steps, self.neighbor_size, 3 + 30))
         mlp_train_data_in, _ = self.get_mlp_train_data()
@@ -195,9 +195,9 @@ class RNNDataset(Dataset):
                 max_dep = neighbor_data["max_dep"].iloc[0]
                 neighbor_data[neighbor_data["dep"] > max_dep] = 0
 
-                x = np.cos(lat) * np.cos(lon)
-                y = np.cos(lat) * np.sin(lon)
-                z = np.sin(lat)
+                x = np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon))
+                y = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
+                z = np.sin(np.deg2rad(lat))
 
                 dx = x - label["x"]
                 dy = y - label["y"]
