@@ -42,7 +42,7 @@ class InterpMLP(pl.LightningModule):
             )
             cur_features = h_dim
 
-        self.mlp_in_flatten = nn.Flatten(start_dim=2)
+        self.mlp_input_layer = nn.Flatten(start_dim=1)
         self.mlp_model = nn.Sequential(*modules, nn.Linear(cur_features, out_channels))
 
     def forward(self, input: Tensor, label: dict) -> list[Tensor]:
@@ -54,9 +54,8 @@ class InterpMLP(pl.LightningModule):
         mu, log_var = self.vae_model.encode(input[:, :, 3:].float())
         encoder_output = self.vae_model.reparameterize(mu, log_var)
 
-        mlp_input = torch.cat([encoder_output, input[:, :, :3].float()], dim=2)
-        flatten = self.first_layer(mlp_input)
-        mlp_output = self.mlp_model(flatten)
+        mlp_input = self.mlp_input_layer(torch.cat([encoder_output, input[:, :, :3].float()], dim=2))
+        mlp_output = self.mlp_model(mlp_input)
 
         meta_data = [label[dim].unsqueeze(1).float() for dim in self.meta_dims]
         decoder_input = torch.concat([mlp_output, *meta_data], dim=1)

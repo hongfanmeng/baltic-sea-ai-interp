@@ -36,8 +36,8 @@ class InterpRNN(pl.LightningModule):
             batch_first=True,
         )
         self.rnn_output_layer = nn.Sequential(
-            nn.Flatten(start_dim=1),
-            nn.Linear(hidden_size, out_channels),
+            nn.Flatten(),
+            nn.Linear(hidden_size * self.year_steps, out_channels),
         )
 
     def forward(self, input: Tensor, label: dict) -> list[Tensor]:
@@ -53,7 +53,7 @@ class InterpRNN(pl.LightningModule):
         rnn_input: Tensor = self.rnn_input_layer(rnn_input)
 
         rnn_output, _ = self.rnn_model(rnn_input)
-        rnn_output = self.rnn_output_layer(rnn_output[:, -1])
+        rnn_output = self.rnn_output_layer(rnn_output)
 
         meta_data = [label[dim].unsqueeze(1).float() for dim in self.meta_dims]
         decoder_input = torch.concat([rnn_output, *meta_data], dim=1)

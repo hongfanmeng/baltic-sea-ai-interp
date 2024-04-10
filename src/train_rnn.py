@@ -49,7 +49,7 @@ if __name__ == "__main__":
     # For reproducibility
     seed_everything(config["train_params"]["manual_seed"], True)
 
-    vae_model = VanillaVAE.load_from_checkpoint(base_dir / "logs/VAE/nan_0.7/checkpoints/last.ckpt")
+    vae_model = VanillaVAE.load_from_checkpoint(base_dir / "logs/VAE/nan_0.7_fixed/checkpoints/last.ckpt")
     rnn_model = InterpRNN(**config, vae_model=vae_model)
 
     data = RNNDataModule(
