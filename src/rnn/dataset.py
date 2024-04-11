@@ -55,10 +55,12 @@ class RNNDataset(Dataset):
         test_size=0.2,
         neighbor_size=5,
         year_steps=5,
+        max_dis=2.0,
     ):
         # save params
         self.neighbor_size = neighbor_size
         self.year_steps = year_steps
+        self.max_dis = max_dis
 
         # shared memory cache of dataset
         self.dataset_cache = manager.dict()
@@ -178,7 +180,7 @@ class RNNDataset(Dataset):
         label["y"] = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
         label["z"] = np.sin(np.deg2rad(lat))
 
-        inputs = np.zeros((self.year_steps, self.neighbor_size, 3 + 30))
+        inputs = np.zeros((self.year_steps, self.neighbor_size, 2 + 30))
         mlp_train_data_in, _ = self.get_mlp_train_data()
 
         # e.g. year_steps = 5, calc past 4 year and current year
@@ -195,16 +197,17 @@ class RNNDataset(Dataset):
                 max_dep = neighbor_data["max_dep"].iloc[0]
                 neighbor_data[neighbor_data["dep"] > max_dep] = 0
 
-                x = np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon))
-                y = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
-                z = np.sin(np.deg2rad(lat))
+                dlon = lon - label["lon"]
+                dlat = lat - label["lat"]
 
-                dx = x - label["x"]
-                dy = y - label["y"]
-                dz = z - label["z"]
+                # remove neighbors that are too far
+                if np.sqrt(dlon**2 + dlat**2) > self.max_dis:
+                    inputs[y_idx, n_idx, :2] = [dlon, dlat]
+                    inputs[y_idx, n_idx, 2:] = 0
+                    continue
 
-                inputs[y_idx, n_idx, :3] = [dx, dy, dz]
-                inputs[y_idx, n_idx, 3:] = neighbor_data["oxy"].values
+                inputs[y_idx, n_idx, :2] = [dlon, dlat]
+                inputs[y_idx, n_idx, 2:] = neighbor_data["oxy"].values
 
         # shape: (year, neighbors, features)
         inputs = np.array(inputs)
@@ -222,18 +225,19 @@ class RNNDataModule(LightningDataModule):
         pin_memory: bool = False,
         neighbor_size: int = 5,
         year_steps: int = 5,
+        max_dis: float = 2,
     ):
         super().__init__()
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.neighbor_size = neighbor_size
-        self.year_steps = year_steps
+
+        self.dataset_params = {"neighbor_size": neighbor_size, "year_steps": year_steps, "max_dis": max_dis}
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_dataset = RNNDataset(split="train", neighbor_size=self.neighbor_size, year_steps=self.year_steps)
-        self.val_dataset = RNNDataset(split="test", neighbor_size=self.neighbor_size, year_steps=self.year_steps)
+        self.train_dataset = RNNDataset(split="train", **self.dataset_params)
+        self.val_dataset = RNNDataset(split="test", **self.dataset_params)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(

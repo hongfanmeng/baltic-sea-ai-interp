@@ -11,7 +11,7 @@ class InterpRNN(pl.LightningModule):
         super(InterpRNN, self).__init__()
         self.save_hyperparameters(ignore="vae_model")
 
-        # Freeze VAE model when training MLP
+        # Freeze VAE model when training RNN
         self.vae_model = vae_model
         self.vae_model.freeze()
 
@@ -43,13 +43,13 @@ class InterpRNN(pl.LightningModule):
     def forward(self, input: Tensor, label: dict) -> list[Tensor]:
         """
         Args:
-            input (Tensor): (batch_size, year, neighbor, features), features[:3] = (dx, dy, dz), features[3:] = oxy
+            input (Tensor): (batch_size, year, neighbor, features), features[:2] = (dlon, dlat), features[3:] = oxy
             label (dict): keys: year, lat, lon, max_dep, real, x, y, z
         """
-        mu, log_var = self.vae_model.encode(input[:, :, :, 3:].float())
+        mu, log_var = self.vae_model.encode(input[:, :, :, 2:].float())
         encoder_output = self.vae_model.reparameterize(mu, log_var)
 
-        rnn_input = torch.cat([encoder_output, input[:, :, :, :3].float()], dim=3)
+        rnn_input = torch.cat([encoder_output, input[:, :, :, :2].float()], dim=3)
         rnn_input: Tensor = self.rnn_input_layer(rnn_input)
 
         rnn_output, _ = self.rnn_model(rnn_input)
