@@ -2,6 +2,7 @@ import pytorch_lightning as pl
 import torch
 from torch import Tensor, nn, optim
 from torch.functional import F
+from torchvision.ops import MLP
 
 from vae import VanillaVAE
 
@@ -10,7 +11,7 @@ class InterpMLP(pl.LightningModule):
     def __init__(
         self,
         vae_model: VanillaVAE,
-        hidden_channels: list[int] = [100, 100, 100],
+        hidden_channels: list[int] = [200, 200, 200],
         **kwargs,
     ) -> None:
         super(InterpMLP, self).__init__()
@@ -29,21 +30,12 @@ class InterpMLP(pl.LightningModule):
         out_channels = self.model_params["out_channels"]
         neighbor_size = self.data_params["neighbor_size"]
 
-        # MLP Model
-        modules = []
-        cur_features = in_channels * neighbor_size
-        for h_dim in hidden_channels:
-            modules.append(
-                nn.Sequential(
-                    nn.Linear(cur_features, h_dim),
-                    # nn.BatchNorm1d(h_dim),
-                    nn.LeakyReLU(),
-                )
-            )
-            cur_features = h_dim
-
         self.mlp_input_layer = nn.Flatten(start_dim=1)
-        self.mlp_model = nn.Sequential(*modules, nn.Linear(cur_features, out_channels))
+        self.mlp_model = MLP(
+            in_channels * neighbor_size,
+            hidden_channels=[*hidden_channels, out_channels],
+            activation_layer=nn.LeakyReLU,
+        )
 
     def forward(self, input: Tensor, label: dict) -> list[Tensor]:
         """
@@ -51,10 +43,10 @@ class InterpMLP(pl.LightningModule):
             input (Tensor): (batch_size, neighbor, features), features[:3] = (dx, dy, dz), features[3:] = oxy
             label (dict): keys: year, lat, lon, max_dep, real, x, y, z
         """
-        mu, log_var = self.vae_model.encode(input[:, :, 3:].float())
+        mu, log_var = self.vae_model.encode(input[:, :, 2:].float())
         encoder_output = self.vae_model.reparameterize(mu, log_var)
 
-        mlp_input = self.mlp_input_layer(torch.cat([encoder_output, input[:, :, :3].float()], dim=2))
+        mlp_input = self.mlp_input_layer(torch.cat([encoder_output, input[:, :, :2].float()], dim=2))
         mlp_output = self.mlp_model(mlp_input)
 
         meta_data = [label[dim].unsqueeze(1).float() for dim in self.meta_dims]

@@ -154,10 +154,6 @@ class MLPDataset(Dataset):
         data[["oxy", "tmp", "sal"]] = (data[["oxy", "tmp", "sal"]] - self.mean) / self.std
         label["real"] = data["oxy"].values
 
-        label["x"] = np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon))
-        label["y"] = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
-        label["z"] = np.sin(np.deg2rad(lat))
-
         inputs = []
         mlp_train_data_in, _ = self.get_mlp_train_data()
         neighbors = self.get_neighbors(year, lat, lon, k=self.neighbor_size)
@@ -175,15 +171,14 @@ class MLPDataset(Dataset):
             max_dep = neighbor_data["max_dep"].iloc[0]
             neighbor_data[neighbor_data["dep"] > max_dep] = 0
 
-            x = np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon))
-            y = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
-            z = np.sin(np.deg2rad(lat))
+            dlon = lon - label["lon"]
+            dlat = lat - label["lat"]
 
-            dx = x - label["x"]
-            dy = y - label["y"]
-            dz = z - label["z"]
+            inputs.append([dlon, dlat] + neighbor_data["oxy"].values.tolist())
 
-            inputs.append([dx, dy, dz] + neighbor_data["oxy"].values.tolist())
+        label["x"] = np.cos(np.deg2rad(lat)) * np.cos(np.deg2rad(lon))
+        label["y"] = np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(lon))
+        label["z"] = np.sin(np.deg2rad(lat))
 
         self.dataset_cache[idx] = (np.array(inputs), label)
         return np.array(inputs), label

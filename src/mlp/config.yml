@@ -1,6 +1,6 @@
 model_params:
   name: "MLP"
-  in_channels: 8 # latent 5 + meta 3 (dx, dy, dz)
+  in_channels: 7 # latent 5 + meta 2 (dlon, dlat)
   out_channels: 5 # latent 5
   meta_dims: # dims adding to decoder
     - "x"
