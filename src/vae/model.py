@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 import torch
 from torch import Tensor, nn, optim
 from torch.nn import functional as F
+from torchvision.ops import MLP
 
 
 class VanillaVAE(pl.LightningModule):
@@ -17,59 +18,35 @@ class VanillaVAE(pl.LightningModule):
         self.meta_dims: list[str] = self.model_params["meta_dims"]
 
         in_channels: int = self.model_params["in_channels"]
-        hidden_dims = [40, 40, 40]
+        hidden_channels = [40, 40, 40]
 
-        # Build Encoder
-        modules = []
-        cur_features = in_channels
-        for h_dim in hidden_dims:
-            modules.append(
-                nn.Sequential(
-                    nn.Linear(cur_features, h_dim),
-                    # nn.BatchNorm1d(h_dim),
-                    nn.LeakyReLU(),
-                )
-            )
-            cur_features = h_dim
-        self.encoder = nn.Sequential(*modules)
+        self.encoder = MLP(
+            in_channels,
+            hidden_channels=hidden_channels,
+            activation_layer=nn.LeakyReLU,
+        )
 
         # mu, sigma
-        self.fc_mu = nn.Linear(hidden_dims[-1], self.latent_dim)
-        self.fc_var = nn.Linear(hidden_dims[-1], self.latent_dim)
+        self.fc_mu = nn.Linear(hidden_channels[-1], self.latent_dim)
+        self.fc_var = nn.Linear(hidden_channels[-1], self.latent_dim)
 
-        # Build Decoder
-        modules = []
-        self.decoder_input = nn.Linear(self.latent_dim + len(self.meta_dims), hidden_dims[-1])
-        hidden_dims.reverse()
-        for i in range(len(hidden_dims) - 1):
-            modules.append(
-                nn.Sequential(
-                    nn.Linear(hidden_dims[i], hidden_dims[i + 1]),
-                    # nn.BatchNorm1d(hidden_dims[i + 1]),
-                    nn.LeakyReLU(),
-                )
-            )
-        self.decoder = nn.Sequential(*modules)
-
-        self.final_layer = nn.Sequential(
-            nn.Linear(hidden_dims[-1], in_channels),
-            # nn.BatchNorm1d(in_channels),
+        hidden_channels.reverse()
+        self.decoder = MLP(
+            self.latent_dim + len(self.meta_dims),
+            hidden_channels=[*hidden_channels, in_channels],
+            activation_layer=nn.LeakyReLU,
         )
 
     def encode(self, input: Tensor) -> List[Tensor]:
         result = self.encoder(input)
 
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
         mu = self.fc_mu(result)
         log_var = self.fc_var(result)
 
         return [mu, log_var]
 
     def decode(self, z: Tensor) -> Tensor:
-        result = self.decoder_input(z)
-        result = self.decoder(result)
-        result = self.final_layer(result)
+        result = self.decoder(z)
         return result
 
     def reparameterize(self, mu: Tensor, logvar: Tensor) -> Tensor:
