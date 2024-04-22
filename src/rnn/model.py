@@ -49,6 +49,9 @@ class InterpRNN(pl.LightningModule):
         mu, log_var = self.vae_model.encode(input[:, :, :, 2:].float())
         encoder_output = self.vae_model.reparameterize(mu, log_var)
 
+        dis = torch.sqrt(input[:, :, :, 0] ** 2 + input[:, :, :, 1] ** 2)
+        encoder_output[dis > self.model_params["max_neighbor_dis"]] = 0
+
         rnn_input = torch.cat([encoder_output, input[:, :, :, :2].float()], dim=3)
         rnn_input: Tensor = self.rnn_input_layer(rnn_input)
 

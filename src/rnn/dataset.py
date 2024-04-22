@@ -55,12 +55,10 @@ class RNNDataset(Dataset):
         test_size=0.2,
         neighbor_size=5,
         year_steps=5,
-        max_dis=2.0,
     ):
         # save params
         self.neighbor_size = neighbor_size
         self.year_steps = year_steps
-        self.max_dis = max_dis
 
         # shared memory cache of dataset
         self.dataset_cache = manager.dict()
@@ -200,12 +198,6 @@ class RNNDataset(Dataset):
                 dlon = lon - label["lon"]
                 dlat = lat - label["lat"]
 
-                # remove neighbors that are too far
-                if np.sqrt(dlon**2 + dlat**2) > self.max_dis:
-                    inputs[y_idx, n_idx, :2] = [dlon, dlat]
-                    inputs[y_idx, n_idx, 2:] = 0
-                    continue
-
                 inputs[y_idx, n_idx, :2] = [dlon, dlat]
                 inputs[y_idx, n_idx, 2:] = neighbor_data["oxy"].values
 
@@ -225,7 +217,6 @@ class RNNDataModule(LightningDataModule):
         pin_memory: bool = False,
         neighbor_size: int = 5,
         year_steps: int = 5,
-        max_dis: float = 2,
     ):
         super().__init__()
         self.train_batch_size = train_batch_size
@@ -233,7 +224,7 @@ class RNNDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-        self.dataset_params = {"neighbor_size": neighbor_size, "year_steps": year_steps, "max_dis": max_dis}
+        self.dataset_params = {"neighbor_size": neighbor_size, "year_steps": year_steps}
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.train_dataset = RNNDataset(split="train", **self.dataset_params)
