@@ -1,10 +1,10 @@
 model_params:
-  name: "RNN"
-  in_channels: 7 # latent 5 + meta 3 (dlon, dlat)
+  name: "GRU"
+  in_channels: 7 # latent 5 + meta 2 (dlon, dlat)
   out_channels: 5 # latent 5
-  hidden_size: 200
+  hidden_size: 400
   num_layers: 3
-  max_neighbor_dis: 2
+  max_neighbor_dis: 1000
   meta_dims: # dims adding to decoder
     - "x"
     - "y"
@@ -14,8 +14,8 @@ data_params:
   train_batch_size: 64
   val_batch_size: 64
   num_workers: 16
-  neighbor_size: 15
-  year_steps: 5
+  neighbor_size: 20
+  year_steps: 3
 
 train_params:
   LR: 0.005
@@ -29,4 +29,4 @@ trainer_params:
 
 logging_params:
   save_dir: "logs/"
-  name: "RNN"
+  name: "GRU"

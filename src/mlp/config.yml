@@ -6,12 +6,13 @@ model_params:
     - "x"
     - "y"
     - "z"
+  max_neighbor_dis: 100
 
 data_params:
   train_batch_size: 64
   val_batch_size: 64
   num_workers: 12
-  neighbor_size: 15
+  neighbor_size: 20
 
 train_params:
   LR: 0.005

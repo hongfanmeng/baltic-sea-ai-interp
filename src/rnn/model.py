@@ -29,7 +29,7 @@ class InterpRNN(pl.LightningModule):
 
         # RNN Model
         self.rnn_input_layer = nn.Flatten(start_dim=2)
-        self.rnn_model = nn.LSTM(
+        self.rnn_model = nn.GRU(
             input_size=in_channels * neighbor_size,
             hidden_size=hidden_size,
             num_layers=num_layers,

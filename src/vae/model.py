@@ -18,7 +18,7 @@ class VanillaVAE(pl.LightningModule):
         self.meta_dims: list[str] = self.model_params["meta_dims"]
 
         in_channels: int = self.model_params["in_channels"]
-        hidden_channels = [40, 40, 40]
+        hidden_channels = [100, 100, 100]
 
         self.encoder = MLP(
             in_channels,

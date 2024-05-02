@@ -11,7 +11,7 @@ class InterpMLP(pl.LightningModule):
     def __init__(
         self,
         vae_model: VanillaVAE,
-        hidden_channels: list[int] = [200, 200, 200],
+        hidden_channels: list[int] = [400, 400, 400],
         **kwargs,
     ) -> None:
         super(InterpMLP, self).__init__()
@@ -45,6 +45,9 @@ class InterpMLP(pl.LightningModule):
         """
         mu, log_var = self.vae_model.encode(input[:, :, 2:].float())
         encoder_output = self.vae_model.reparameterize(mu, log_var)
+
+        dis = torch.sqrt(input[:, :, 0] ** 2 + input[:, :, 1] ** 2)
+        encoder_output[dis > self.model_params["max_neighbor_dis"]] = 0
 
         mlp_input = self.mlp_input_layer(torch.cat([encoder_output, input[:, :, :2].float()], dim=2))
         mlp_output = self.mlp_model(mlp_input)
