@@ -10,4 +10,6 @@ logs/
 /figures
 /*.ipynb
 
+!/thesis.ipynb
+
 .idea
