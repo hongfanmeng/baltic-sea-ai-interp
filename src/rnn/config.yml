@@ -4,7 +4,7 @@ model_params:
   out_channels: 5 # latent 5
   hidden_size: 400
   num_layers: 3
-  max_neighbor_dis: 1000
+  max_neighbor_dis: 2
   meta_dims: # dims adding to decoder
     - "x"
     - "y"
@@ -13,7 +13,7 @@ model_params:
 data_params:
   train_batch_size: 64
   val_batch_size: 64
-  num_workers: 16
+  num_workers: 12
   neighbor_size: 20
   year_steps: 3
 
