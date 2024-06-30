@@ -15,9 +15,9 @@ if __name__ == "__main__":
 
     model_inputs = pd.read_pickle(base_dir / "data/model_inputs.pkl")
 
-    vae_model = VanillaVAE.load_from_checkpoint(base_dir / "logs/VAE/h100/checkpoints/last.ckpt")
+    vae_model = VanillaVAE.load_from_checkpoint(base_dir / "logs/VAE/version_0/checkpoints/last.ckpt")
     rnn_model = InterpRNN.load_from_checkpoint(
-        base_dir / "logs/GRU/h400/checkpoints/epoch=102-step=14832.ckpt",
+        base_dir / "logs/GRU/version_0/checkpoints/last.ckpt",
         vae_model=vae_model,
     )
 
