@@ -74,7 +74,7 @@ class InterpMLP(pl.LightningModule):
 
         return {"loss": mse, "mae": mae, "mape": mape}
 
-    def training_step(self, batch):
+    def training_step(self, batch, batch_idx):
         input, label = batch
 
         results = self.forward(input, label=label)
@@ -84,7 +84,7 @@ class InterpMLP(pl.LightningModule):
 
         return train_loss["loss"]
 
-    def validation_step(self, batch):
+    def validation_step(self, batch, batch_idx):
         input, label = batch
 
         results = self.forward(input, label=label)
